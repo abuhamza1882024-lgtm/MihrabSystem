@@ -1,0 +1,7 @@
+{
+  "token": "PASTE_PERMANENT_ACCESS_TOKEN",
+  "phoneId": "PASTE_PHONE_NUMBER_ID",
+  "reminderTemplate": "class_reminder",
+  "language": "en",
+  "minutesBefore": 30
+}
