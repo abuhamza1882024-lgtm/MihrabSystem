@@ -75,6 +75,7 @@ h2{margin:4px 0 12px;color:var(--g)}h3{margin:0 0 8px}
 .ov .card{max-width:640px;width:100%;color:var(--tx)}
 @media print{header,nav,.noprint{display:none!important}.ov{position:static;background:none}}
 </style></head><body><div id="app"></div>
+<script src="./config.js"></script>
 <script>
 const LOGO="data:image/jpeg;base64,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";
 const K='mihrab_db_v1';let db,me,view='',F={};
@@ -91,11 +92,30 @@ slots:[{id:1,tid:1,sid:1,day:'Sunday',start:'16:00',dur:60,sub:'Quran'},{id:2,ti
 lessons:[{id:1,tid:1,sid:1,slot:1,sub:'Quran',date:d+'01',dur:60,hw:'Done',rating:5,status:'approved',tr:100,sr:8},{id:2,tid:1,sid:3,slot:2,sub:'Arabic Language',date:d+'02',dur:90,hw:'Partial',rating:4,status:'approved',tr:100,sr:8},{id:3,tid:2,sid:2,slot:3,sub:'Islamic Studies',date:d+'03',dur:45,hw:'Done',rating:5,status:'pending'}],
 pay:{},audit:[],n:{t:3,s:4,sl:4,l:4}}}
 
+const API=window.MIHRAB_API||'';
 let TOKEN=null,RESTORE=false,SEQ=0;
 const idle=()=>!document.querySelector('.ov:not(.bx)')&&!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
-async function api(p,o={}){const r=await fetch(p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status==401&&TOKEN)logout();return r}
+async function api(p,o={}){const r=await fetch(API+p,{...o,headers:{'Content-Type':'application/json',...(TOKEN?{Authorization:'Bearer '+TOKEN}:{}),...(o.headers||{})}});if(r.status==401&&TOKEN)logout();return r}
 function logout(){TOKEN=null;me=null;db=null;render()}
-function save(){if(!TOKEN)return;const my=++SEQ,hd=RESTORE?{'X-Restore':'1'}:{};RESTORE=false;api('/api/db',{method:'PUT',body:JSON.stringify(db),headers:hd}).then(r=>r.json()).then(d=>{if(d.error){alert(d.error);return api('/api/db').then(r=>r.json()).then(x=>{if(!x.error){db=x;render()}})}if(my!=SEQ)return;db=d;if(idle())render()}).catch(()=>{})}
+function save(){
+ if(!TOKEN)return;
+ const request=++SEQ,headers=RESTORE?{'X-Restore':'1'}:{};
+ RESTORE=false;
+ api('/api/db',{method:'PUT',body:JSON.stringify(db),headers})
+  .then(response=>response.json())
+  .then(data=>{
+   if(data.error){
+    alert(data.error);
+    return api('/api/db').then(response=>response.json()).then(current=>{
+     if(!current.error){db=current;render()}
+    })
+   }
+   if(request!=SEQ)return;
+   db=data;
+   if(idle())render()
+  })
+  .catch(()=>{})
+}
 setInterval(()=>{if(!TOKEN||!idle())return;api('/api/db').then(r=>r.json()).then(d=>{if(!d.error&&TOKEN){db=d;render()}}).catch(()=>{})},20000);
 function log(m){db.audit.unshift({t:new Date().toLocaleString(),by:me.u,m});save()}
 const T=id=>db.teachers.find(x=>x.id==id)||{name:'?',rate:0},S=id=>db.students.find(x=>x.id==id)||{name:'?',rate:0};
@@ -113,7 +133,7 @@ function render0(){
  if(!nav.includes(view))view=nav[0];
  $('#app').innerHTML=`<header><img src="${LOGO}" alt=""><div><b>MIHRAB</b><br><small>Educational Institute</small></div><span class="sp"></span><small>${esc(me.u)} · ${me.role.toUpperCase()}</small><button class="sec" style="color:#fff;border-color:#fff" onclick="acct()">Change password</button><button class="sec" style="color:#fff;border-color:#fff" onclick="setLang()">EN / ع</button><button class="sec" style="color:#fff;border-color:#fff" onclick="logout()">Logout</button></header><nav>${nav.map(n=>`<button class="${n==view?'on':''}${n==NAVA?' bn':''}" onclick="view='${n}';NAVA='${n}';render()">${ico(n)}<span>${n}</span></button>`).join('')}</nav><main>${page()}</main><div id="ov"></div>`;
 }
-async function login(){try{const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({u:$('#u').value.trim(),p:$('#p').value})});if(!r.ok){$('#e').textContent=trs('Invalid username or password');return}const d=await r.json();TOKEN=d.token;db=d.db;me={u:d.u,role:d.role,tid:d.tid};view='';render()}catch(e){$('#e').textContent=trs('Cannot reach the server. Start it with start.bat and open the address it shows.')}}
+async function login(){try{const r=await fetch(API+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({u:$('#u').value.trim(),p:$('#p').value})});if(!r.ok){$('#e').textContent=trs('Invalid username or password');return}const d=await r.json();TOKEN=d.token;db=d.db;me={u:d.u,role:d.role,tid:d.tid};view='';render()}catch(e){$('#e').textContent=trs('Cannot reach the server.')}}
 function page(){ // role guard on every view
  const m={Overview:pOver,Teachers:pTeach,Students:pStud,Schedule:pSched,'My Schedule':pSched,Lessons:pLess,'My Lessons':pLess,Finance:pFin,Settings:pSet,'Register Lesson':pReg,Messages:pMsg};
  const allowed={admin:['Overview','Teachers','Students','Schedule','Lessons','Messages','Finance','Settings'],hr:['Schedule','Teachers','Students','Messages'],teacher:['My Schedule','Register Lesson','My Lessons']}[me.role];
@@ -124,13 +144,34 @@ function pOver(){const s=sum(approved());return`<div class="hero hero1"><h2>Acad
 function pTeach(){const adm=me.role=='admin';
  const add=adm?`<div class="card"><h3>Add teacher</h3><div class="row"><label>Name<input id="tn"></label><label>Hourly rate (EGP)<input id="tr" type="number" value="100"></label><label>Username<input id="tu"></label><label>Password<input id="tp"></label><button onclick="addT()">Add</button></div></div>`:'';
  return`<h2>Teachers</h2>${add}<div class="card"><table><tr><th>Name</th><th>Students</th><th>Salary payment method</th>${adm?'<th>Rate/h (EGP)</th><th>Hours</th><th>Lessons</th><th>Salary</th>':''}<th></th></tr>${act().map(t=>{const s=sum(approved({t:t.id}));return`<tr><td><div class="av-row">${avatar(t)}<div><b>${esc(t.name)}</b>${t.edu?`<div class="mu">${esc(t.edu)}</div>`:''}</div></div></td><td>${new Set(db.slots.filter(x=>x.tid==t.id).map(x=>x.sid)).size}</td><td>${esc(t.payMethod||'—')}</td>${adm?`<td><input type="number" style="width:80px" value="${t.rate}" onchange="setRate('t',${t.id},this.value)"></td><td>${fh(s.min)}</td><td>${s.n}</td><td>${money(s.sal)}</td>`:''}<td><button class="sm" onclick="editT(${t.id})">Edit profile</button> <button class="sm sec" onclick="F.t=${t.id};view='Schedule';render()">Schedule</button> <button class="sm bad" onclick="removeT(${t.id})">Remove</button></td></tr>`}).join('')}</table></div>`}
-function addT(){const n=$('#tn').value.trim(),u=$('#tu').value.trim();if(!n||!u||db.users.some(x=>x.u==u))return alert('Name and a unique username are required');const id=db.n.t++;db.teachers.push({id,name:n,rate:+$('#tr').value||0});db.users.push({u,p:$('#tp').value||'123456',role:'teacher',tid:id});log('Added teacher '+n);render()}
+function addT(){
+ const name=$('#tn').value.trim(),username=$('#tu').value.trim();
+ if(!name||!username||db.users.some(user=>user.u==username))return alert('Name and a unique username are required');
+ const id=db.n.t++;
+ db.teachers.push({id,name,rate:+$('#tr').value||0});
+ db.users.push({u:username,p:$('#tp').value||'123456',role:'teacher',tid:id});
+ log('Added teacher '+name);
+ render()
+}
 function setRate(k,id,v){const o=k=='t'?T(id):S(id);log(`Rate of ${o.name}: ${o.rate} → ${v}`);o.rate=+v||0;save();render()}
 
 function pStud(){const adm=me.role=='admin';
  const add=`<div class="card"><h3>Add student</h3><div class="row"><label>Name<input id="sn"></label>${adm?'<label>Hourly rate (USD)<input id="sr" type="number" value="8" step="0.5"></label>':''}<label>WhatsApp<input id="sp" dir="ltr" placeholder="+1 555 123 4567"></label><div><div class="mu">Subjects</div><div style="display:flex;gap:12px;flex-wrap:wrap;padding:6px 0">${subChecks([])}</div></div><button onclick="addS()">Add</button></div></div>`;
  return`<h2>Students</h2>${add}<div class="card"><div class="row"><input placeholder="Search…" value="${esc(F.q||'')}" oninput="F.q=this.value;render();document.activeElement.blur()"></div><table><tr><th>Student</th><th>Teacher</th><th>Subject</th>${adm?'<th>Lessons</th><th>Hours</th><th>Rate/h (USD)</th><th>Due</th>':''}<th>WhatsApp</th><th></th></tr>${db.students.filter(s=>!s.left&&s.name.toLowerCase().includes((F.q||'').toLowerCase())).map(s=>{const sl=db.slots.filter(x=>x.sid==s.id),t=sum(approved({s:s.id}));return`<tr><td>${esc(s.name)}${stBadge(s)}${s.payMethod?`<div class="mu">${esc(s.payMethod)}</div>`:''}</td><td>${[...new Set(sl.map(x=>T(x.tid).name))].join(', ')||'—'}</td><td>${((s.subs&&s.subs.length)?s.subs:[...new Set(sl.map(x=>x.sub))]).map(x=>`<span class="tag">${esc(x)}</span> `).join('')||'—'} <button class="sm sec" onclick="editSubs(${s.id})">Edit</button></td>${adm?`<td>${t.n}</td><td>${fh(t.min)}</td><td><input type="number" style="width:80px" value="${s.rate}" onchange="setRate('s',${s.id},this.value)"></td><td>${usd(t.fee)}</td>`:''}<td><input style="width:130px" dir="ltr" value="${s.phone?'+'+esc(s.phone):''}" placeholder="+1 555 123 4567" onchange="setPhone(${s.id},this)"></td><td><button class="sm" onclick="editS(${s.id})">Edit</button> ${pauseBtn(s)} <button class="sm bad" onclick="removeS(${s.id})">Remove</button></td></tr>`}).join('')}</table></div>`}
-function addS(){const n=$('#sn').value.trim();if(!n)return;if($('#sp').value.trim()&&!normPhone($('#sp').value))return alert('Invalid phone number. Include the country code, for example +1 555 123 4567.');db.students.push({id:db.n.s++,name:n,rate:me.role=='admin'?+$('#sr').value||0:0,phone:normPhone($('#sp').value),subs:[...document.querySelectorAll('.sbx:checked')].map(c=>c.value)});log('Added student '+n);render()}
+function addS(){
+ const name=$('#sn').value.trim(),phone=$('#sp').value;
+ if(!name)return;
+ if(phone.trim()&&!normPhone(phone))return alert('Invalid phone number. Include the country code, for example +1 555 123 4567.');
+ db.students.push({
+  id:db.n.s++,
+  name,
+  rate:me.role=='admin'?+$('#sr').value||0:0,
+  phone:normPhone(phone),
+  subs:[...document.querySelectorAll('.sbx:checked')].map(subject=>subject.value)
+ });
+ log('Added student '+name);
+ render()
+}
 
 function pSchedOld(){const tch=me.role=='teacher',ed=db.slots.find(x=>x.id==F.edit)||{};
  const opt=(a,v,f)=>a.map(x=>`<option value="${f?x.id:x}" ${v==(f?x.id:x)?'selected':''}>${esc(f?x.name:x)}</option>`).join('');

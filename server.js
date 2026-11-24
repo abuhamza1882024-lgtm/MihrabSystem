@@ -1,79 +1,603 @@
 // MIHRAB server – no dependencies, needs only Node.js (v18+)
-const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto'),os=require('os');
-const PORT=+process.env.PORT||3000,DIR=__dirname,FILE=path.join(DIR,process.env.DATA||'data.json');
-const hash=(p,s)=>{s=s||crypto.randomBytes(16).toString('hex');return s+':'+crypto.scryptSync(String(p),s,32).toString('hex')};
-const ok=(p,h)=>{if(!h)return false;const[s,x]=h.split(':');return crypto.timingSafeEqual(Buffer.from(hash(p,s).split(':')[1],'hex'),Buffer.from(x,'hex'))};
-const seed=()=>({users:[{u:'admin',h:hash('admin123'),role:'admin'},{u:'hr',h:hash('hr123'),role:'hr'}],teachers:[],students:[],subjects:['Quran','Arabic Language','Islamic Studies'],slots:[],lessons:[],pay:{},audit:[],shared:{},n:{t:1,s:1,sl:1,l:1}});
-let D=fs.existsSync(FILE)?JSON.parse(fs.readFileSync(FILE,'utf8')):seed();D.cancels=D.cancels||[];D.reminders=D.reminders||[];D.settings=D.settings||{pay:''};
-const persist=()=>{fs.writeFileSync(FILE+'.tmp',JSON.stringify(D));fs.renameSync(FILE+'.tmp',FILE)};
-const backup=()=>{try{fs.mkdirSync(path.join(DIR,'backups'),{recursive:true});fs.copyFileSync(FILE,path.join(DIR,'backups','data-'+new Date().toISOString().slice(0,10)+'.json'))}catch(e){}};
-persist();backup();setInterval(backup,6*36e5);
-const strip=(o,...k)=>{const r={...o};k.forEach(x=>delete r[x]);return r};
-const toMin=t=>{const[h,m]=t.split(':').map(Number);const x=h*60+m;return x<720?x+1440:x};
-function view(s){const base={subjects:D.subjects,n:D.n};
- if(s.role=='admin')return{...D,waAuto:auto(),users:D.users.map(u=>strip(u,'h'))};
- if(s.role=='hr')return{...base,teachers:D.teachers.map(t=>strip(t,'rate')),students:D.students.map(x=>strip(x,'rate')),slots:D.slots,lessons:D.lessons.map(l=>strip(l,'tr','sr')),cancels:D.cancels,reminders:D.reminders.slice(0,50),waAuto:auto(),users:[],pay:{},audit:[],shared:{}};
- const slots=D.slots.filter(x=>x.tid==s.tid),lessons=D.lessons.filter(l=>l.tid==s.tid).map(l=>strip(l,'sr')),ids=new Set([...slots.map(x=>x.sid),...lessons.map(l=>l.sid)]),re=new RegExp('^t'+s.tid+'(\\d{4}-\\d{2})?$');
- return{...base,teachers:D.teachers.filter(t=>t.id==s.tid),students:D.students.filter(x=>ids.has(x.id)).map(x=>strip(x,'rate','phone')),slots,lessons,cancels:D.cancels.filter(k=>slots.some(x=>x.id==k.slot)),users:[],pay:{},audit:[],shared:Object.fromEntries(Object.entries(D.shared||{}).filter(([k])=>re.test(k)))}}
-function merge(s,c,restore){
- if(!c||['teachers','students','slots','lessons'].some(k=>!Array.isArray(c[k])))return'Invalid data';
- const aud=()=>{const seen=new Set(D.audit.map(a=>a.t+a.by+a.m));[...(c.audit||[])].reverse().forEach(a=>{if(a&&!seen.has(a.t+a.by+a.m))D.audit.unshift({t:String(a.t),by:s.u,m:String(a.m).slice(0,300)})});D.audit=D.audit.slice(0,500)};
- if(s.role=='admin'){
-  const us=(c.users||[]).map(x=>{const o=D.users.find(y=>y.u==x.u);return{u:String(x.u),role:x.role,tid:x.tid,h:x.p?hash(x.p):o?o.h:hash('ChangeMe123')}});
-  if(!us.some(u=>u.role=='admin')||us.some(u=>!['admin','hr','teacher'].includes(u.role)))return'At least one admin is required';
-  if(restore)D.lessons=c.lessons;else{const m=new Map(D.lessons.map(l=>[l.id,l]));c.lessons.forEach(l=>m.set(l.id,l));D.lessons=[...m.values()]}
-  D.users=us;D.teachers=c.teachers.map(t=>({...t,photo:typeof t.photo=='string'&&t.photo.startsWith('data:image/')&&t.photo.length<150000?t.photo:'',edu:String(t.edu||'').slice(0,200),payMethod:String(t.payMethod||'').slice(0,200)}));D.students=c.students.map(cleanS);D.subjects=c.subjects;D.slots=c.slots;D.pay=c.pay||{};D.shared=c.shared||{};aud();
- }else if(s.role=='hr'){
-  D.slots=c.slots;D.students=c.students.map(x=>{const o=D.students.find(y=>y.id==x.id);return{...cleanS(x),rate:o?o.rate:0}});
-  c.teachers.forEach(t=>{const o=D.teachers.find(y=>y.id==t.id);if(!o)return;if(String(t.name||'').trim())o.name=String(t.name).trim().slice(0,100);o.payMethod=String(t.payMethod||'').slice(0,200);if(t.left&&!o.left){o.left=true;D.users=D.users.filter(u=>u.tid!=o.id)}});aud();
- }else{
-  const add=[],now=new Date();
-  for(const l of c.lessons.filter(l=>l.isNew&&l.tid==s.tid)){
-   const sl=D.slots.find(x=>x.id==l.slot&&x.tid==s.tid);if(!sl)return'Lesson not scheduled for you';if(D.cancels.some(k=>k.slot==l.slot&&k.date==l.date))return'This lesson was cancelled by the academy.';if(paused(D.students.find(z=>z.id==sl.sid),l.date))return'This student is on a break for that date.';
-   if(![...D.lessons,...add].some(x=>x.slot==l.slot&&x.date==l.date&&x.status!='rejected')===false)return'This lesson is already registered for that date.';
-   const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(l.date||'');if(!m||!(+l.dur>=5&&+l.dur<=300))return'Invalid lesson data';
-   if(new Date(+m[1],+m[2]-1,+m[3],0,toMin(sl.start)+sl.dur)>now)return'You can only register a lesson after it ends.';
-   add.push({id:D.n.l++,tid:s.tid,sid:sl.sid,slot:sl.id,sub:sl.sub,date:l.date,dur:+l.dur,hw:String(l.hw||'').slice(0,300),advice:String(l.advice||'').slice(0,300),att:l.att=='absent'?'absent':'present',rating:l.att=='absent'?0:Math.min(5,Math.max(1,+l.rating||5)),status:'approved',tr:(D.teachers.find(x=>x.id==s.tid)||{}).rate||0,sr:(D.students.find(x=>x.id==sl.sid)||{}).rate||0});
-  }
-  D.lessons.push(...add);
- }
- if(s.role!='teacher'&&Array.isArray(c.cancels))D.cancels=c.cancels.filter(k=>k&&Number.isFinite(+k.slot)&&/^\d{4}-\d{2}-\d{2}$/.test(k.date)).map(k=>({slot:+k.slot,date:k.date,by:s.u}));
- if(s.role=='hr')c.lessons.forEach(l=>{const o=D.lessons.find(x=>x.id==l.id);if(o)o.sent=!!l.sent});
- D.students.forEach(x=>{if(x.phone!=null)x.phone=String(x.phone).replace(/[^0-9]/g,'').slice(0,15)});
- if(s.role!='teacher')(c.reminders||[]).forEach(r=>{const o=D.reminders.find(x=>x.key==r.key);if(o&&o.status=='due'&&r.status=='sent')o.status='sent'});
- if(s.role=='admin'&&c.settings&&typeof c.settings=='object')D.settings={pay:String(c.settings.pay||'').slice(0,300)};
- for(const k in D.n)D.n[k]=Math.max(D.n[k],(c.n&&c.n[k])||0);
- return null}
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
 
-const dOK=v=>/^\d{4}-\d{2}-\d{2}$/.test(v||''),okPause=p=>p&&dOK(p.from)?{from:p.from,to:dOK(p.to)?p.to:''}:undefined,paused=(s,ds)=>!!(s&&s.pause&&s.pause.from&&ds>=s.pause.from&&(!s.pause.to||ds<=s.pause.to)),cleanS=x=>({...x,name:String(x.name||'').trim().slice(0,100)||'?',payMethod:String(x.payMethod||'').slice(0,200),pause:okPause(x.pause)});
+const PORT = +process.env.PORT || 3000;
+const DIR = __dirname;
+const DATA_FILE = path.join(DIR, process.env.DATA || 'data.json');
+
+const hash = (password, salt) => {
+  salt = salt || crypto.randomBytes(16).toString('hex');
+  return salt + ':' + crypto.scryptSync(String(password), salt, 32).toString('hex');
+};
+
+const ok = (password, storedHash) => {
+  if (!storedHash) return false;
+  const [salt, value] = storedHash.split(':');
+  return crypto.timingSafeEqual(
+    Buffer.from(hash(password, salt).split(':')[1], 'hex'),
+    Buffer.from(value, 'hex')
+  );
+};
+
+const seed = () => ({
+  users: [
+    { u: 'admin', h: hash('admin123'), role: 'admin' },
+    { u: 'hr', h: hash('hr123'), role: 'hr' }
+  ],
+  teachers: [],
+  students: [],
+  subjects: ['Quran', 'Arabic Language', 'Islamic Studies'],
+  slots: [],
+  lessons: [],
+  pay: {},
+  audit: [],
+  shared: {},
+  n: { t: 1, s: 1, sl: 1, l: 1 }
+});
+
+let db = fs.existsSync(DATA_FILE)
+  ? JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))
+  : seed();
+
+db.cancels = db.cancels || [];
+db.reminders = db.reminders || [];
+db.settings = db.settings || { pay: '' };
+
+const persist = () => {
+  fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(db));
+  fs.renameSync(DATA_FILE + '.tmp', DATA_FILE);
+};
+
+const backup = () => {
+  try {
+    fs.mkdirSync(path.join(DIR, 'backups'), { recursive: true });
+    fs.copyFileSync(
+      DATA_FILE,
+      path.join(DIR, 'backups', 'data-' + new Date().toISOString().slice(0, 10) + '.json')
+    );
+  } catch (error) {}
+};
+
+persist();
+backup();
+setInterval(backup, 6 * 36e5);
+
+const strip = (object, ...keys) => {
+  const result = { ...object };
+  keys.forEach(key => delete result[key]);
+  return result;
+};
+
+const toMin = time => {
+  const [hours, minutes] = time.split(':').map(Number);
+  const total = hours * 60 + minutes;
+  return total < 720 ? total + 1440 : total;
+};
+
+function view(session) {
+  const base = { subjects: db.subjects, n: db.n };
+
+  if (session.role == 'admin') {
+    return {
+      ...db,
+      waAuto: auto(),
+      users: db.users.map(user => strip(user, 'h'))
+    };
+  }
+
+  if (session.role == 'hr') {
+    return {
+      ...base,
+      teachers: db.teachers.map(teacher => strip(teacher, 'rate')),
+      students: db.students.map(student => strip(student, 'rate')),
+      slots: db.slots,
+      lessons: db.lessons.map(lesson => strip(lesson, 'tr', 'sr')),
+      cancels: db.cancels,
+      reminders: db.reminders.slice(0, 50),
+      waAuto: auto(),
+      users: [],
+      pay: {},
+      audit: [],
+      shared: {}
+    };
+  }
+
+  const slots = db.slots.filter(slot => slot.tid == session.tid);
+  const lessons = db.lessons
+    .filter(lesson => lesson.tid == session.tid)
+    .map(lesson => strip(lesson, 'sr'));
+  const studentIds = new Set([
+    ...slots.map(slot => slot.sid),
+    ...lessons.map(lesson => lesson.sid)
+  ]);
+  const sharedPattern = new RegExp('^t' + session.tid + '(\\d{4}-\\d{2})?$');
+
+  return {
+    ...base,
+    teachers: db.teachers.filter(teacher => teacher.id == session.tid),
+    students: db.students
+      .filter(student => studentIds.has(student.id))
+      .map(student => strip(student, 'rate', 'phone')),
+    slots,
+    lessons,
+    cancels: db.cancels.filter(cancel => slots.some(slot => slot.id == cancel.slot)),
+    users: [],
+    pay: {},
+    audit: [],
+    shared: Object.fromEntries(
+      Object.entries(db.shared || {}).filter(([key]) => sharedPattern.test(key))
+    )
+  };
+}
+
+function merge(session, clientDb, restore) {
+  if (
+    !clientDb ||
+    ['teachers', 'students', 'slots', 'lessons'].some(key => !Array.isArray(clientDb[key]))
+  ) {
+    return 'Invalid data';
+  }
+
+  const mergeAudit = () => {
+    const seen = new Set(db.audit.map(entry => entry.t + entry.by + entry.m));
+    [...(clientDb.audit || [])].reverse().forEach(entry => {
+      if (entry && !seen.has(entry.t + entry.by + entry.m)) {
+        db.audit.unshift({
+          t: String(entry.t),
+          by: session.u,
+          m: String(entry.m).slice(0, 300)
+        });
+      }
+    });
+    db.audit = db.audit.slice(0, 500);
+  };
+
+  if (session.role == 'admin') {
+    const users = (clientDb.users || []).map(user => {
+      const current = db.users.find(existing => existing.u == user.u);
+      return {
+        u: String(user.u),
+        role: user.role,
+        tid: user.tid,
+        h: user.p ? hash(user.p) : current ? current.h : hash('ChangeMe123')
+      };
+    });
+
+    if (
+      !users.some(user => user.role == 'admin') ||
+      users.some(user => !['admin', 'hr', 'teacher'].includes(user.role))
+    ) {
+      return 'At least one admin is required';
+    }
+
+    if (restore) {
+      db.lessons = clientDb.lessons;
+    } else {
+      const lessons = new Map(db.lessons.map(lesson => [lesson.id, lesson]));
+      clientDb.lessons.forEach(lesson => lessons.set(lesson.id, lesson));
+      db.lessons = [...lessons.values()];
+    }
+
+    db.users = users;
+    db.teachers = clientDb.teachers.map(teacher => ({
+      ...teacher,
+      photo:
+        typeof teacher.photo == 'string' &&
+        teacher.photo.startsWith('data:image/') &&
+        teacher.photo.length < 150000
+          ? teacher.photo
+          : '',
+      edu: String(teacher.edu || '').slice(0, 200),
+      payMethod: String(teacher.payMethod || '').slice(0, 200)
+    }));
+    db.students = clientDb.students.map(cleanS);
+    db.subjects = clientDb.subjects;
+    db.slots = clientDb.slots;
+    db.pay = clientDb.pay || {};
+    db.shared = clientDb.shared || {};
+    mergeAudit();
+  } else if (session.role == 'hr') {
+    db.slots = clientDb.slots;
+    db.students = clientDb.students.map(student => {
+      const current = db.students.find(existing => existing.id == student.id);
+      return { ...cleanS(student), rate: current ? current.rate : 0 };
+    });
+
+    clientDb.teachers.forEach(teacher => {
+      const current = db.teachers.find(existing => existing.id == teacher.id);
+      if (!current) return;
+      if (String(teacher.name || '').trim()) {
+        current.name = String(teacher.name).trim().slice(0, 100);
+      }
+      current.payMethod = String(teacher.payMethod || '').slice(0, 200);
+      if (teacher.left && !current.left) {
+        current.left = true;
+        db.users = db.users.filter(user => user.tid != current.id);
+      }
+    });
+    mergeAudit();
+  } else {
+    const additions = [];
+    const now = new Date();
+
+    for (const lesson of clientDb.lessons.filter(
+      lesson => lesson.isNew && lesson.tid == session.tid
+    )) {
+      const slot = db.slots.find(
+        current => current.id == lesson.slot && current.tid == session.tid
+      );
+      if (!slot) return 'Lesson not scheduled for you';
+      if (db.cancels.some(cancel => cancel.slot == lesson.slot && cancel.date == lesson.date)) {
+        return 'This lesson was cancelled by the academy.';
+      }
+      if (paused(db.students.find(student => student.id == slot.sid), lesson.date)) {
+        return 'This student is on a break for that date.';
+      }
+      if (
+        ![...db.lessons, ...additions].some(
+          current =>
+            current.slot == lesson.slot &&
+            current.date == lesson.date &&
+            current.status != 'rejected'
+        ) === false
+      ) {
+        return 'This lesson is already registered for that date.';
+      }
+
+      const date = /^(\d{4})-(\d{2})-(\d{2})$/.exec(lesson.date || '');
+      if (!date || !(+lesson.dur >= 5 && +lesson.dur <= 300)) {
+        return 'Invalid lesson data';
+      }
+      if (
+        new Date(+date[1], +date[2] - 1, +date[3], 0, toMin(slot.start) + slot.dur) > now
+      ) {
+        return 'You can only register a lesson after it ends.';
+      }
+
+      additions.push({
+        id: db.n.l++,
+        tid: session.tid,
+        sid: slot.sid,
+        slot: slot.id,
+        sub: slot.sub,
+        date: lesson.date,
+        dur: +lesson.dur,
+        hw: String(lesson.hw || '').slice(0, 300),
+        advice: String(lesson.advice || '').slice(0, 300),
+        att: lesson.att == 'absent' ? 'absent' : 'present',
+        rating:
+          lesson.att == 'absent' ? 0 : Math.min(5, Math.max(1, +lesson.rating || 5)),
+        status: 'approved',
+        tr: (db.teachers.find(teacher => teacher.id == session.tid) || {}).rate || 0,
+        sr: (db.students.find(student => student.id == slot.sid) || {}).rate || 0
+      });
+    }
+
+    db.lessons.push(...additions);
+  }
+
+  if (session.role != 'teacher' && Array.isArray(clientDb.cancels)) {
+    db.cancels = clientDb.cancels
+      .filter(
+        cancel =>
+          cancel && Number.isFinite(+cancel.slot) && /^\d{4}-\d{2}-\d{2}$/.test(cancel.date)
+      )
+      .map(cancel => ({ slot: +cancel.slot, date: cancel.date, by: session.u }));
+  }
+
+  if (session.role == 'hr') {
+    clientDb.lessons.forEach(lesson => {
+      const current = db.lessons.find(existing => existing.id == lesson.id);
+      if (current) current.sent = !!lesson.sent;
+    });
+  }
+
+  db.students.forEach(student => {
+    if (student.phone != null) {
+      student.phone = String(student.phone).replace(/[^0-9]/g, '').slice(0, 15);
+    }
+  });
+
+  if (session.role != 'teacher') {
+    (clientDb.reminders || []).forEach(reminder => {
+      const current = db.reminders.find(existing => existing.key == reminder.key);
+      if (current && current.status == 'due' && reminder.status == 'sent') {
+        current.status = 'sent';
+      }
+    });
+  }
+
+  if (session.role == 'admin' && clientDb.settings && typeof clientDb.settings == 'object') {
+    db.settings = { pay: String(clientDb.settings.pay || '').slice(0, 300) };
+  }
+
+  for (const key in db.n) {
+    db.n[key] = Math.max(db.n[key], (clientDb.n && clientDb.n[key]) || 0);
+  }
+
+  return null;
+}
+
+const dOK = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '');
+const okPause = pause =>
+  pause && dOK(pause.from)
+    ? { from: pause.from, to: dOK(pause.to) ? pause.to : '' }
+    : undefined;
+const paused = (student, date) =>
+  !!(
+    student &&
+    student.pause &&
+    student.pause.from &&
+    date >= student.pause.from &&
+    (!student.pause.to || date <= student.pause.to)
+  );
+const cleanS = student => ({
+  ...student,
+  name: String(student.name || '').trim().slice(0, 100) || '?',
+  payMethod: String(student.payMethod || '').slice(0, 200),
+  pause: okPause(student.pause)
+});
+
 // ---- WhatsApp reminders (30 min before each lesson) ----
-const WA_API=process.env.WA_API||'https://graph.facebook.com/v20.0',NOW=()=>process.env.MIHRAB_TEST_NOW?new Date(process.env.MIHRAB_TEST_NOW):new Date();
-const readWA=()=>{try{return JSON.parse(fs.readFileSync(path.join(DIR,'whatsapp.json'),'utf8'))}catch(e){return{}}};
-const auto=()=>{const W=readWA();return!!(W.token&&W.phoneId)};
-const ymdS=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'),DNs=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-const hm12=x=>{x%=1440;const h=Math.floor(x/60);return(h%12||12)+':'+String(x%60).padStart(2,'0')+' '+(h<12?'AM':'PM')};
-async function sendWA(W,to,params){const r=await fetch(WA_API+'/'+W.phoneId+'/messages',{method:'POST',headers:{Authorization:'Bearer '+W.token,'Content-Type':'application/json'},body:JSON.stringify({messaging_product:'whatsapp',to,type:'template',template:{name:W.reminderTemplate||'class_reminder',language:{code:W.language||'en'},components:[{type:'body',parameters:params.map(p=>({type:'text',text:String(p)}))}]}})});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error((j.error&&j.error.message)||('HTTP '+r.status));return j}
-function tick(){const W=readWA(),on=!!(W.token&&W.phoneId),min=+W.minutesBefore||30,now=NOW();let ch=false;
- for(let i=-1;i<=1;i++){const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i),ds=ymdS(d);
-  D.slots.filter(x=>x.day==DNs[d.getDay()]&&(!x.since||ds>=x.since)).forEach(x=>{
-   const st=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,toMin(x.start)),key=x.id+'|'+ds;
-   if(now<new Date(st-min*6e4)||now>=st||D.reminders.some(r=>r.key==key)||D.cancels.some(k=>k.slot==x.id&&k.date==ds))return;
-   const s=D.students.find(z=>z.id==x.sid),t=D.teachers.find(z=>z.id==x.tid);if(!s||s.left||!t||t.left||paused(s,ds))return;
-   const time=hm12(toMin(x.start)),r={key,slot:x.id,sid:x.sid,date:ds,student:s.name,sub:x.sub,teacher:t.name,time,at:now.toISOString(),status:s.phone?'due':'nophone',text:`Assalamu alaikum! A friendly reminder from MIHRAB Educational Institute: ${s.name}'s ${x.sub} lesson with ${t.name} starts today at ${time} (in about ${min} minutes). Jazakum Allahu khairan.`};
-   D.reminders.unshift(r);ch=true;
-   if(on&&s.phone)sendWA(W,s.phone,[s.name,x.sub,t.name,time]).then(()=>{r.status='sent'}).catch(e=>{r.status='failed';r.error=String(e.message).slice(0,200)}).finally(persist)})}
- if(D.reminders.length>300)D.reminders.length=300;if(ch)persist()}
-setInterval(tick,+process.env.TICK_MS||30000);tick();
-const S=new Map(),send=(res,code,o)=>{res.writeHead(code,{'Content-Type':'application/json'});res.end(JSON.stringify(o))};
-http.createServer((req,res)=>{
- if(req.method=='GET'&&(req.url=='/'||req.url=='/index.html'))return fs.readFile(path.join(DIR,'public','index.html'),(e,b)=>{res.writeHead(e?500:200,{'Content-Type':'text/html; charset=utf-8'});res.end(e?'Missing public/index.html':b)});
- if(!req.url.startsWith('/api/'))return send(res,404,{error:'Not found'});
- let body='';req.on('data',c=>{body+=c;if(body.length>60e6)req.destroy()});
- req.on('end',()=>{let j={};try{j=body?JSON.parse(body):{}}catch(e){return send(res,400,{error:'Bad JSON'})}
-  if(req.url=='/api/login'&&req.method=='POST'){const u=D.users.find(x=>x.u==j.u);if(!u||!ok(j.p,u.h))return setTimeout(()=>send(res,401,{error:'Invalid'}),600);const token=crypto.randomBytes(24).toString('hex'),s={u:u.u,role:u.role,tid:u.tid,exp:Date.now()+12*36e5};S.set(token,s);return send(res,200,{token,u:s.u,role:s.role,tid:s.tid,db:view(s)})}
-  const s=S.get((req.headers.authorization||'').slice(7));if(!s||s.exp<Date.now()||!D.users.some(x=>x.u==s.u))return send(res,401,{error:'Session expired'});
-  if(req.url=='/api/db'&&req.method=='GET')return send(res,200,view(s));
-  if(req.url=='/api/db'&&req.method=='PUT'){const e=merge(s,j,req.headers['x-restore']=='1'&&s.role=='admin');if(e)return send(res,400,{error:e});persist();return send(res,200,view(s))}
-  if(req.url=='/api/password'&&req.method=='POST'){const u=D.users.find(x=>x.u==s.u);if(!ok(j.old,u.h)||String(j.new||'').length<6)return send(res,400,{error:'Invalid'});u.h=hash(j.new);persist();return send(res,200,{ok:1})}
-  send(res,404,{error:'Not found'})})
-}).listen(PORT,'0.0.0.0',()=>{console.log('\nMIHRAB is running.\n  On this PC:   http://localhost:'+PORT);Object.values(os.networkInterfaces()).flat().filter(i=>i.family=='IPv4'&&!i.internal).forEach(i=>console.log('  Other PCs:    http://'+i.address+':'+PORT));console.log('\nKeep this window open. Press Ctrl+C to stop.\n')});
+const WA_API = process.env.WA_API || 'https://graph.facebook.com/v20.0';
+const NOW = () =>
+  process.env.MIHRAB_TEST_NOW ? new Date(process.env.MIHRAB_TEST_NOW) : new Date();
+
+const readWA = () => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(DIR, 'whatsapp.json'), 'utf8'));
+  } catch (error) {
+    return {};
+  }
+};
+
+const auto = () => {
+  const settings = readWA();
+  return !!(settings.token && settings.phoneId);
+};
+
+const ymdS = date =>
+  date.getFullYear() +
+  '-' +
+  String(date.getMonth() + 1).padStart(2, '0') +
+  '-' +
+  String(date.getDate()).padStart(2, '0');
+const DNs = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const hm12 = minutes => {
+  minutes %= 1440;
+  const hours = Math.floor(minutes / 60);
+  return (
+    (hours % 12 || 12) +
+    ':' +
+    String(minutes % 60).padStart(2, '0') +
+    ' ' +
+    (hours < 12 ? 'AM' : 'PM')
+  );
+};
+
+async function sendWA(settings, to, params) {
+  const response = await fetch(WA_API + '/' + settings.phoneId + '/messages', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + settings.token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: settings.reminderTemplate || 'class_reminder',
+        language: { code: settings.language || 'en' },
+        components: [
+          {
+            type: 'body',
+            parameters: params.map(param => ({ type: 'text', text: String(param) }))
+          }
+        ]
+      }
+    })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error((result.error && result.error.message) || 'HTTP ' + response.status);
+  }
+  return result;
+}
+
+function tick() {
+  const settings = readWA();
+  const automatic = !!(settings.token && settings.phoneId);
+  const minutesBefore = +settings.minutesBefore || 30;
+  const now = NOW();
+  let changed = false;
+
+  for (let offset = -1; offset <= 1; offset++) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    const dateString = ymdS(date);
+
+    db.slots
+      .filter(
+        slot => slot.day == DNs[date.getDay()] && (!slot.since || dateString >= slot.since)
+      )
+      .forEach(slot => {
+        const start = new Date(
+          date.getFullYear(),
+          date.getMonth(),
+          date.getDate(),
+          0,
+          toMin(slot.start)
+        );
+        const key = slot.id + '|' + dateString;
+
+        if (
+          now < new Date(start - minutesBefore * 6e4) ||
+          now >= start ||
+          db.reminders.some(reminder => reminder.key == key) ||
+          db.cancels.some(cancel => cancel.slot == slot.id && cancel.date == dateString)
+        ) {
+          return;
+        }
+
+        const student = db.students.find(current => current.id == slot.sid);
+        const teacher = db.teachers.find(current => current.id == slot.tid);
+        if (
+          !student ||
+          student.left ||
+          !teacher ||
+          teacher.left ||
+          paused(student, dateString)
+        ) {
+          return;
+        }
+
+        const time = hm12(toMin(slot.start));
+        const reminder = {
+          key,
+          slot: slot.id,
+          sid: slot.sid,
+          date: dateString,
+          student: student.name,
+          sub: slot.sub,
+          teacher: teacher.name,
+          time,
+          at: now.toISOString(),
+          status: student.phone ? 'due' : 'nophone',
+          text: `Assalamu alaikum! A friendly reminder from MIHRAB Educational Institute: ${student.name}'s ${slot.sub} lesson with ${teacher.name} starts today at ${time} (in about ${minutesBefore} minutes). Jazakum Allahu khairan.`
+        };
+
+        db.reminders.unshift(reminder);
+        changed = true;
+
+        if (automatic && student.phone) {
+          sendWA(settings, student.phone, [student.name, slot.sub, teacher.name, time])
+            .then(() => {
+              reminder.status = 'sent';
+            })
+            .catch(error => {
+              reminder.status = 'failed';
+              reminder.error = String(error.message).slice(0, 200);
+            })
+            .finally(persist);
+        }
+      });
+  }
+
+  if (db.reminders.length > 300) db.reminders.length = 300;
+  if (changed) persist();
+}
+
+setInterval(tick, +process.env.TICK_MS || 30000);
+tick();
+
+const sessions = new Map();
+const send = (response, status, object) => {
+  response.writeHead(status, { 'Content-Type': 'application/json' });
+  response.end(JSON.stringify(object));
+};
+
+http
+  .createServer((request, response) => {
+    if (
+      request.method == 'GET' &&
+      (request.url == '/' || request.url == '/index.html')
+    ) {
+      return fs.readFile(path.join(DIR, 'public', 'index.html'), (error, body) => {
+        response.writeHead(error ? 500 : 200, {
+          'Content-Type': 'text/html; charset=utf-8'
+        });
+        response.end(error ? 'Missing public/index.html' : body);
+      });
+    }
+
+    if (!request.url.startsWith('/api/')) {
+      return send(response, 404, { error: 'Not found' });
+    }
+
+    let body = '';
+    request.on('data', chunk => {
+      body += chunk;
+      if (body.length > 60e6) request.destroy();
+    });
+
+    request.on('end', () => {
+      let data = {};
+      try {
+        data = body ? JSON.parse(body) : {};
+      } catch (error) {
+        return send(response, 400, { error: 'Bad JSON' });
+      }
+
+      if (request.url == '/api/login' && request.method == 'POST') {
+        const user = db.users.find(current => current.u == data.u);
+        if (!user || !ok(data.p, user.h)) {
+          return setTimeout(() => send(response, 401, { error: 'Invalid' }), 600);
+        }
+
+        const token = crypto.randomBytes(24).toString('hex');
+        const session = {
+          u: user.u,
+          role: user.role,
+          tid: user.tid,
+          exp: Date.now() + 12 * 36e5
+        };
+        sessions.set(token, session);
+        return send(response, 200, {
+          token,
+          u: session.u,
+          role: session.role,
+          tid: session.tid,
+          db: view(session)
+        });
+      }
+
+      const session = sessions.get((request.headers.authorization || '').slice(7));
+      if (
+        !session ||
+        session.exp < Date.now() ||
+        !db.users.some(user => user.u == session.u)
+      ) {
+        return send(response, 401, { error: 'Session expired' });
+      }
+
+      if (request.url == '/api/db' && request.method == 'GET') {
+        return send(response, 200, view(session));
+      }
+
+      if (request.url == '/api/db' && request.method == 'PUT') {
+        const error = merge(
+          session,
+          data,
+          request.headers['x-restore'] == '1' && session.role == 'admin'
+        );
+        if (error) return send(response, 400, { error });
+        persist();
+        return send(response, 200, view(session));
+      }
+
+      if (request.url == '/api/password' && request.method == 'POST') {
+        const user = db.users.find(current => current.u == session.u);
+        if (!ok(data.old, user.h) || String(data.new || '').length < 6) {
+          return send(response, 400, { error: 'Invalid' });
+        }
+        user.h = hash(data.new);
+        persist();
+        return send(response, 200, { ok: 1 });
+      }
+
+      send(response, 404, { error: 'Not found' });
+    });
+  })
+  .listen(PORT, '0.0.0.0', () => {
+    console.log('\nMIHRAB is running.\n  On this PC:   http://localhost:' + PORT);
+    Object.values(os.networkInterfaces())
+      .flat()
+      .filter(address => address.family == 'IPv4' && !address.internal)
+      .forEach(address => console.log('  Other PCs:    http://' + address.address + ':' + PORT));
+    console.log('\nKeep this window open. Press Ctrl+C to stop.\n');
+  });
