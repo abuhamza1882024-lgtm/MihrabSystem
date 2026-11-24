@@ -180,17 +180,17 @@ begin
     raise exception 'state_conflict';
   end if;
 
-  delete from lesson_slots;
-  delete from lessons;
-  delete from users;
-  delete from teachers;
-  delete from students;
-  delete from subjects;
-  delete from payments;
-  delete from audit_entries;
-  delete from shared_reports;
-  delete from cancellations;
-  delete from reminders;
+  delete from lesson_slots where true;
+  delete from lessons where true;
+  delete from users where true;
+  delete from teachers where true;
+  delete from students where true;
+  delete from subjects where true;
+  delete from payments where true;
+  delete from audit_entries where true;
+  delete from shared_reports where true;
+  delete from cancellations where true;
+  delete from reminders where true;
 
   insert into teachers
   select id, name, rate, coalesce(photo, ''), coalesce(edu, ''), coalesce(pay_method, ''), coalesce(left_academy, false)
