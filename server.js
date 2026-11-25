@@ -77,6 +77,29 @@ const toMin = time => {
   const total = hours * 60 + minutes;
   return total < 720 ? total + 1440 : total;
 };
+const cairoFormat = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Africa/Cairo',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  second: 'numeric',
+  hourCycle: 'h23'
+});
+const cairoDate = (instant = new Date()) => {
+  const parts = Object.fromEntries(
+    cairoFormat.formatToParts(instant).map(part => [part.type, part.value])
+  );
+  return new Date(
+    +parts.year,
+    +parts.month - 1,
+    +parts.day,
+    +parts.hour,
+    +parts.minute,
+    +parts.second
+  );
+};
 
 function view(session) {
   const base = { subjects: db.subjects, n: db.n };
@@ -222,7 +245,7 @@ function merge(session, clientDb, restore) {
     mergeAudit();
   } else {
     const additions = [];
-    const now = new Date();
+    const now = cairoDate();
 
     for (const lesson of clientDb.lessons.filter(
       lesson => lesson.isNew && lesson.tid == session.tid
@@ -414,7 +437,8 @@ function tick() {
   const settings = readWA();
   const automatic = !!(settings.token && settings.phoneId);
   const minutesBefore = +settings.minutesBefore || 30;
-  const now = NOW();
+  const instant = NOW();
+  const now = cairoDate(instant);
   let changed = false;
 
   for (let offset = -1; offset <= 1; offset++) {
@@ -466,7 +490,7 @@ function tick() {
           sub: slot.sub,
           teacher: teacher.name,
           time,
-          at: now.toISOString(),
+          at: instant.toISOString(),
           status: student.phone ? 'due' : 'nophone',
           text: `Assalamu alaikum! A friendly reminder from MIHRAB Educational Institute: ${student.name}'s ${slot.sub} lesson with ${teacher.name} starts today at ${time} (in about ${minutesBefore} minutes). Jazakum Allahu khairan.`
         };
